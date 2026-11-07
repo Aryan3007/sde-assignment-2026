@@ -1,0 +1,5 @@
+{
+  "_comment": "Client preferences that are stricter than the signed policy. They can only tighten behaviour. Unknown workflows use the policy as-is.",
+  "ks_cancel": {"max_requests_per_24h": 2, "earliest_request_hour": 11,
+                "source": "stakeholders/04 (Anita Desai): two requests a day max, never before 11:00"}
+}
