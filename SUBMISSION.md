@@ -348,7 +348,7 @@ Measured on public_03_load (`reports/load_test.md`, Apple M-series, one core use
 4. **Quarantined numbers are never re-probed.** That's fine in a 10-day simulation, wrong in production.
 5. **Interactions** between welcome message and voice are assumed multiplicative and not tested.
 6. **The impact score is uncalibrated** (a mapping, not a model).
-7. **Results vary run to run** (±3 points on ALL conclusions), because the simulator's randomness depends on our actions. I report the latest full runs, not the best.
+7. **Results are sensitive to small behaviour changes.** A run is deterministic for a given code version (a fresh clone reproduced public_01 exactly: +10.4%). But the simulator's randomness depends on our actions, so any change to a threshold moves the whole trajectory; during development ALL conclusions moved by ±3 points between versions. The reports are from the final code, not the best version.
 8. **Single process.** One slow workflow or one OS I/O stall delays all of them. I observed a 70 s stall once, and a 343 s ingest stall when a second run shared the disk; per-module timing logs and the decision-lag metric make both visible.
 9. **Unknown caller IDs are a bet either way.** Probing a bad number costs pickup; not probing leaves load concentrated. A 4% probe keeps one bad number under the grader's −2% harm line on these workflows, but it slows the pickup gain (public_01 ks_cancel +3.7%).
 10. **Policy-bound incident latency.** With 6-hour approver days and an 8 h expiry (stress_01), an evening incident waits until morning. Doing better needs a client-side on-call approver.
