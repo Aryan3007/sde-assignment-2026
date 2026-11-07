@@ -132,7 +132,8 @@ def why(store: Store, wf: str, at: int) -> str:
             r = json.loads(req)
             L += [f"- requested {fmt_min(cm)} via {route} ({kind}); decided {fmt_min(dm)}",
                   f"- summary: {r.get('change_summary')}", f"- rationale: {r.get('rationale')}",
-                  f"- impact score {r.get('impact_score')}, affected leads {r.get('affected_leads')}",
+                  *([f"- impact score {r.get('impact_score')}, affected leads {r.get('affected_leads')}"]
+                    if route == "approval" else ["- auto-applied within the signed policy (no approval needed)"]),
                   f"- evidence: {json.dumps(r.get('evidence'))[:600]}",
                   f"- diff: {json.dumps(r.get('diff'))[:900]}"]
     elif actor == "supervisor":

@@ -224,10 +224,10 @@ class Experiments:
             early = self.compare(self.strata_between(d, s["live_since"], ctx.now - S.DECAY_WINDOW_HOURS * 60), a, inc)
             trend = ((r.diff - early.diff) / (r.se ** 2 + early.se ** 2) ** 0.5
                      if early.n_a and r.n_a and r.se < 1e9 and early.se < 1e9 else 0.0)
-            if r.n_a and (r.diff < 0 or trend <= S.TREND_Z_HOLD):
+            if r.n_a and (r.diff < S.RECENT_MIN_FRACTION * c.diff or trend <= S.TREND_Z_HOLD):
                 ctx.store.decide(ctx.wf, "experiment_hold",
                                  f"{d}={a} is significant overall (z={c.z:.2f}) but its last-24h lift ({r.rel:+.1%}) is "
-                                 f"{'negative' if r.diff < 0 else 'significantly below the earlier period'} "
+                                 f"{'well below its cumulative lift' if r.diff < S.RECENT_MIN_FRACTION * c.diff else 'significantly below the earlier period'} "
                                  f"(trend z={trend:.2f}); not promoting a fading winner",
                                  {"dim": d, "arm": a, "overall": c.as_dict(), "recent": r.as_dict(),
                                   "earlier": early.as_dict(), "trend_z": trend})
@@ -318,6 +318,8 @@ class Experiments:
         r = self.compare(self.strata(d, cut), w, c0)
         if r.n_b < S.DECAY_MIN_CONTROL_CONN:
             return False
+        if (ctx.now - s["live_since"]) / 60 < S.DECAY_MIN_LIVE_HOURS and r.z > S.DECAY_Z_CLEARLY_WORSE:
+            return False   # too early to call decay unless the winner is clearly worse right now
         p = s["promo"]
         e = self.compare(self.strata_between(d, s["live_since"], cut), w, c0)
         if e.n_b >= S.DECAY_MIN_CONTROL_CONN and e.se < 1e9:
@@ -325,10 +327,20 @@ class Experiments:
         else:   # not enough post-promotion history yet: shrink the promotion estimate instead
             ref_diff, ref_se, ref = p["diff"] - 1.5 * p["se"], p["se"], "promotion (shrunk)"
         z_drop = (r.diff - ref_diff) / math.sqrt(r.se ** 2 + ref_se ** 2) if r.se < 1e9 else 0.0
+        # all post-promotion data (grows, so it gains power) vs the shrunk promotion estimate:
+        # catches a winner that had ALREADY faded by the time it was promoted
+        post = self.compare(self.strata(d, s["live_since"]), w, c0)
+        shrunk = p["diff"] - 1.5 * p["se"]
+        z_post_drop = ((post.diff - shrunk) / math.sqrt(post.se ** 2 + p["se"] ** 2)
+                       if post.se < 1e9 and post.n_b >= S.DECAY_MIN_CONTROL_CONN else 0.0)
         s["last_decay_check"] = {"at": ctx.now, **r.as_dict(), "ref": ref, "ref_diff": round(ref_diff, 4),
-                                 "z_drop": round(z_drop, 3)}
-        if r.z <= S.DECAY_Z_WORSE or (z_drop <= S.DECAY_Z_DROP_FROM_PROMO and ref_diff > 0
-                                      and r.diff <= S.DECAY_KEEP_FRACTION * ref_diff):
+                                 "z_drop": round(z_drop, 3), "post": post.as_dict(), "z_post_drop": round(z_post_drop, 3)}
+        lost_recent = z_drop <= S.DECAY_Z_DROP_FROM_PROMO and ref_diff > 0 and r.diff <= S.DECAY_KEEP_FRACTION * ref_diff
+        lost_post = (post.z <= S.DECAY_POST_Z_WORSE or
+                     (z_post_drop <= S.DECAY_Z_DROP_FROM_PROMO and shrunk > 0 and post.diff <= S.DECAY_KEEP_FRACTION * shrunk))
+        if r.z <= S.DECAY_Z_WORSE or lost_recent or lost_post:
+            if lost_post and not lost_recent and r.z > S.DECAY_Z_WORSE:
+                ref, ref_diff, z_drop, r = "post-promotion (all) vs shrunk promotion", shrunk, z_post_drop, post
             s["excluded"] = {a: why for a, why in s["excluded"].items() if why != "not_selected"}
             s["excluded"][w] = "decayed"
             s.update(status="rolled_back", shares={c0: 1.0}, incumbent=c0, winner=None, control=None,

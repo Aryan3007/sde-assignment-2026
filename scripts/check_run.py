@@ -62,7 +62,9 @@ def main():
     missing = [k for k in server if k not in ours]
     check("every server approval is in our store", not missing, missing)
     mism = {k: (ours[k], v) for k, v in server.items() if k in ours and ours[k] != v
-            and not (ours[k] == "withdrawn" and v in ("approved", "lapsed"))}
+            # an approved change we refused to apply (withdrawn) or could not (409 stale -> re-proposed) stays
+            # 'approved' on the simulator: it only lapses if someone tries to apply it after apply_by
+            and not (ours[k] in ("withdrawn", "stale") and v in ("approved", "lapsed"))}
     check("our approval statuses match the server's", not mism, mism)
     check("nothing left pending/approved-unapplied in our store at the end",
           not db.execute("SELECT COUNT(*) FROM proposals WHERE status IN ('sending')").fetchone()[0])

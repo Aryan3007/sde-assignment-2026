@@ -73,8 +73,13 @@ class Incidents:
         if conn == 0:
             return False, 1.0
         p = binom_sf(flags, conn, min(base * 1.2, 0.99))
-        alpha, n_min = (S.HALLUC_P_FAST, S.HALLUC_MIN_CONN_FAST) if fast else (S.HALLUC_P, S.HALLUC_MIN_CONN)
-        return (conn >= n_min and p < alpha and flags / conn >= S.HALLUC_MIN_RATIO * base), p
+        if fast == "decisive":   # validation failed by a clear margin: live data only has to agree
+            alpha, n_min, ratio = S.HALLUC_P_DECISIVE, S.HALLUC_MIN_CONN_FAST, S.HALLUC_MIN_RATIO_DECISIVE
+        elif fast:
+            alpha, n_min, ratio = S.HALLUC_P_FAST, S.HALLUC_MIN_CONN_FAST, S.HALLUC_MIN_RATIO
+        else:
+            alpha, n_min, ratio = S.HALLUC_P, S.HALLUC_MIN_CONN, S.HALLUC_MIN_RATIO
+        return (conn >= n_min and p < alpha and flags / conn >= ratio * base), p
 
     def _watch_prompt_change(self, cur: str):
         """Someone else changed the prompt: spend one validation run (2 credits) on the new prompt now.
@@ -126,8 +131,10 @@ class Incidents:
             if not win:
                 return
             w = st.get("watch") or {}
-            failed_validation = w.get("prompt") == cur and not w.get("ok", True)
-            hit, p = self._excess(win["conn"], win["flags"], base["flag_rate"], fast=failed_validation)
+            failed = w.get("prompt") == cur and not w.get("ok", True)
+            decisive = failed and w["pass_rate"] < ctx.gov["min_validation_pass_rate"] - 0.01
+            hit, p = self._excess(win["conn"], win["flags"], base["flag_rate"],
+                                  fast="decisive" if decisive else bool(failed))
             if hit:
                 self._open(cur, win, p, base)
             return
