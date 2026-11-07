@@ -39,7 +39,8 @@ SEGMENT_HARM_Z = -2.33            # carve a segment out of a promotion if it is 
 SEGMENT_HARM_MIN_REL = 0.05
 SEGMENT_MIN_CONN = 100
 MAX_CARVEOUTS_PER_DIM = 3
-PIN_AFTER_SUPERVISOR_HOURS = 72   # we do not touch a dim a supervisor edited for 3 days
+PIN_AFTER_SUPERVISOR_HOURS = 72   # we do not touch a dim a supervisor edited for 3 days...
+SUPERVISOR_NO_AUTO_HOURS = 168    # ...and for 7 days any change to it needs a human approval
 
 # ---------------------------------------------------------------- caller ID
 DID_WINDOW_HOURS = 6              # dialling hours of evidence for health checks
@@ -47,11 +48,13 @@ DID_EVAL_EVERY_MIN = 30
 DID_MIN_DIALS = 250
 DID_QUARANTINE_RATIO = 0.70       # pickup below 70% of the other numbers' pickup...
 DID_QUARANTINE_Z = -3.0           # ...very unlikely to be noise...
-DID_OWN_DROP_RATIO = 0.80         # ...and (if it has a track record) below 80% of its OWN recent pickup
+DID_OWN_DROP_RATIO = 0.70         # ...and (if it has a track record) below 70% of its OWN recent pickup
+                                  # (overload erodes a number gradually, ~0.75-0.9x; a flag collapses it, ~0.3-0.5x)
+DID_KNOWN_RAISE = 1.5             # after a rotation, a known number takes at most 1.5x its share; the rest probes
 DID_OWN_DROP_Z = -2.5
 DID_GRADUATE_RATIO = 0.85         # a probed number needs >= 85% of the others' pickup to get a full share
-DID_PROBE_SHARE_APPROVAL = 0.20   # same, where caller-ID changes need an approval each time
-DID_PROBE_SHARE = 0.10            # max share for a number we have no evidence on (bounds the cost of a bad one)
+DID_PROBE_SHARE_APPROVAL = 0.15   # same, where caller-ID changes need an approval each time
+DID_PROBE_SHARE = 0.04            # max share for a number we have no evidence on (bounds the cost of a bad one)
 DID_MIN_CHANGE_TV = 0.05          # ignore re-balancing smaller than this
 
 # ---------------------------------------------------------------- schedule (call time, per cohort)
@@ -68,6 +71,9 @@ HALLUC_P_FAST = 1e-2              # ...when the new prompt ALSO failed an indepe
 HALLUC_MIN_CONN_FAST = 100
 HALLUC_P_DECISIVE = 0.05          # ...and when it failed by > 1 point: live data only has to agree
 HALLUC_MIN_RATIO_DECISIVE = 1.5
+HALLUC_SUSTAINED_P = 1e-4         # second test: all calls since the prompt went live (<= 3 days)...
+HALLUC_SUSTAINED_RATIO = 1.6      # ...catches a moderate but persistent excess the 4h window misses
+HALLUC_SUSTAINED_MIN_CONN = 400
 HALLUC_MIN_RATIO = 2.0            # and at least 2x the baseline flag rate
 HALLUC_WINDOW_HOURS = 4
 VALIDATION_N = 200                # 2 credits. One run, no re-rolls (re-running until it passes is p-hacking)

@@ -164,6 +164,10 @@ class Experiments:
                     changed |= self._evaluate_exploration(d, s)
                 elif s["status"] == "promoted":
                     changed |= self._evaluate_decay(d, s)
+            elif s["status"] == "promoted" and s["live_since"] is None and \
+                    (s["last_eval"] is None or ctx.now - s["last_eval"] >= S.ANALYSIS_EVERY_MIN):
+                s["last_eval"] = ctx.now
+                changed |= self._recheck_pending_promotion(d, s)
         if changed:
             self.save()
 
@@ -245,6 +249,7 @@ class Experiments:
         if cands:
             _, a, c, r = max(cands)
             carve = self._segment_harm(d, a, inc, s["live_since"])
+            s["explore_shares"] = dict(s["shares"])
             s.update(status="promoted", winner=a, control=inc,
                      shares={a: round(1 - S.HOLDOUT_SHARE, 4), inc: S.HOLDOUT_SHARE},
                      live_since=None, promo={**c.as_dict(), "at": ctx.now, "recent": r.as_dict()},
@@ -288,6 +293,29 @@ class Experiments:
                              f"back to 100% {inc}", {"dim": d, "results": {a: c.as_dict() for a, c in res.items()}})
             return True
         return changed
+
+    def _recheck_pending_promotion(self, d: str, s: dict) -> bool:
+        """A promotion waiting on the approver can go stale: re-check that the winner is still winning.
+
+        If its last-24h lift has faded, go back to exploring. That also bumps the safety version, so
+        governance withdraws the approved-but-unapplied request instead of applying a faded winner."""
+        ctx = self.ctx
+        if ctx.now - s["promo"]["at"] < S.ANALYSIS_EVERY_MIN:
+            return False
+        w, c0 = s["winner"], s["control"]
+        r = self.compare(self.strata(d, ctx.now - S.DECAY_WINDOW_HOURS * 60), w, c0)
+        if not r.n_a or r.diff >= S.RECENT_MIN_FRACTION * s["promo"]["diff"]:
+            return False
+        shares = s.get("explore_shares") or {c0: 1.0}
+        s.update(status="exploring", shares=shares, winner=None, control=None, incumbent=c0, carveouts={},
+                 live_since=None, last_change_kind="drop", promo=None)
+        s["excluded"] = {a: why for a, why in s["excluded"].items() if why != "not_selected"}
+        s["v"] += 1
+        s["safety_v"] = s.get("safety_v", 0) + 1
+        ctx.store.decide(ctx.wf, "experiment_promotion_withdrawn",
+                         f"{d}: {w} was approved for promotion but its last-24h lift is now {r.rel:+.1%} vs {c0}; "
+                         f"not applying it, back to the test", {"dim": d, "arm": w, "recent": r.as_dict()})
+        return True
 
     def _segment_harm(self, d: str, winner: str, control: str, since: int) -> list[tuple[Cohort, dict]]:
         """Single-feature segments where the winner is significantly worse than control: keep them on control."""
@@ -432,7 +460,7 @@ class Experiments:
                     f"n={p['n_a']} vs {p['n_b']} connected calls, stratified by time block and cohort). "
                     f"The last 24h agree ({p['recent']['rel_lift']:+.1%}). "
                     f"{S.HOLDOUT_SHARE:.0%} stays on {s['control']} so we notice if the lift decays.")
-        return s.get("note") or f"risk-reducing change on {d}"
+        return s.get("note") or f"Risk-reducing change on {d}."
 
     def _dry_run(self, d, s, kind) -> dict:
         ctx = self.ctx

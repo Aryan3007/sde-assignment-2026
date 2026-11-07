@@ -81,6 +81,15 @@ class Incidents:
             alpha, n_min, ratio = S.HALLUC_P, S.HALLUC_MIN_CONN, S.HALLUC_MIN_RATIO
         return (conn >= n_min and p < alpha and flags / conn >= ratio * base), p
 
+    def _prompt_live_since(self, cur: str) -> int | None:
+        """Minute the current prompt became live (latest version whose prompt changed), or None if pre-D0."""
+        rows = self.ctx.store.q("SELECT applied_minute, changed_dims FROM config_versions WHERE wf=? AND applied_minute "
+                                "IS NOT NULL ORDER BY version DESC", (self.ctx.wf,))
+        for at, cd in rows:
+            if "prompt_version" in (cd or ""):
+                return at
+        return 0 if cur != (self._baseline() or {}).get("prompt") else None
+
     def _watch_prompt_change(self, cur: str):
         """Someone else changed the prompt: spend one validation run (2 credits) on the new prompt now.
 
@@ -135,6 +144,15 @@ class Incidents:
             decisive = failed and w["pass_rate"] < ctx.gov["min_validation_pass_rate"] - 0.01
             hit, p = self._excess(win["conn"], win["flags"], base["flag_rate"],
                                   fast="decisive" if decisive else bool(failed))
+            if not hit:
+                # moderate but persistent excess (e.g. 2x baseline): everything since this prompt went live
+                live = self._prompt_live_since(cur)
+                if live is not None:
+                    allw = self._prompt_stats(max(live, ctx.now - 3 * 1440)).get(cur)
+                    if allw and allw["conn"] >= S.HALLUC_SUSTAINED_MIN_CONN:
+                        p2 = binom_sf(allw["flags"], allw["conn"], min(base["flag_rate"] * 1.2, 0.99))
+                        if p2 < S.HALLUC_SUSTAINED_P and allw["flags"] / allw["conn"] >= S.HALLUC_SUSTAINED_RATIO * base["flag_rate"]:
+                            hit, p, win = True, p2, {**allw, "window": "since prompt went live"}
             if hit:
                 self._open(cur, win, p, base)
             return
@@ -198,7 +216,7 @@ class Incidents:
         iid = f"inc_{ctx.wf}_{ctx.now}"
         rate = win["flags"] / win["conn"]
         inc = {"id": iid, "kind": "hallucination", "prompt": cur, "opened_at": ctx.now, "status": "selecting",
-               "evidence": {"window_hours": S.HALLUC_WINDOW_HOURS, "connected": win["conn"], "flags": win["flags"],
+               "evidence": {"window": win.get("window", f"last {S.HALLUC_WINDOW_HOURS}h"), "connected": win["conn"], "flags": win["flags"],
                             "flag_rate": round(rate, 4), "baseline_flag_rate": round(base["flag_rate"], 4),
                             "p_value": p},
                "candidates_tried": [], "target": None, "validation": None, "credits": 0}
@@ -207,8 +225,8 @@ class Incidents:
         ctx.store.db.execute("INSERT OR REPLACE INTO incidents VALUES(?,?,?,?,?,?,?)",
                              (iid, ctx.wf, "hallucination", "open", ctx.now, None, _j(inc)))
         ctx.store.decide(ctx.wf, "incident_open",
-                         f"hallucination flags on prompt {cur}: {win['flags']}/{win['conn']} = {rate:.2%} in the last "
-                         f"{S.HALLUC_WINDOW_HOURS}h vs baseline {base['flag_rate']:.2%} (p={p:.1e})", inc["evidence"])
+                         f"hallucination flags on prompt {cur}: {win['flags']}/{win['conn']} = {rate:.2%} "
+                         f"({win.get('window', f'last {S.HALLUC_WINDOW_HOURS}h')}) vs baseline {base['flag_rate']:.2%} (p={p:.1e})", inc["evidence"])
         ctx.store.alert(ctx.wf, "page", f"halluc:{ctx.wf}",
                         f"{ctx.wf}: hallucination rate {rate:.1%} on prompt {cur} ({base['flag_rate']:.1%} baseline). "
                         f"Controller is preparing a validated fix.",

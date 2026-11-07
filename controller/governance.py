@@ -13,7 +13,7 @@ Proposal lifecycle (ours on top of the simulator's):
 
 Routing rules:
 - Auto-apply only when ALL hold: the policy permits every changed dim and the shift; the module
-  allows it; no supervisor touched the dim in the last 72h; and for customer-facing dims
+  allows it; no supervisor touched the dim in the last 7 days; and for customer-facing dims
   (welcome/voice) the move only shrinks exposure (no new arm, only the safe arm gains share).
   Risk-increasing customer-facing moves (start a test, promote) always go to a human.
 - At most one approval request in flight per workflow (a second would go stale on apply), except
@@ -264,7 +264,7 @@ class Governance:
 
     def _supervisor_touched(self, ctx: Ctx) -> set[str]:
         rows = self.store.q("SELECT changed_dims FROM config_versions WHERE wf=? AND actor='supervisor' AND applied_minute >= ?",
-                            (ctx.wf, ctx.now - S.PIN_AFTER_SUPERVISOR_HOURS * 60))
+                            (ctx.wf, ctx.now - S.SUPERVISOR_NO_AUTO_HOURS * 60))
         out = set()
         for (cd,) in rows:
             out |= set(json.loads(cd or "[]"))

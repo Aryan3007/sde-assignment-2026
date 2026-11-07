@@ -193,6 +193,13 @@ class CallerId:
         auto = pol.get("enabled") and "caller_id" in (pol.get("allowed_dims") or [])
         probe = min(eq, S.DID_PROBE_SHARE if auto else S.DID_PROBE_SHARE_APPROVAL)
         rest = (1.0 - probe * len(unknown)) / len(known)
+        # never pile volume onto a known number just to protect against an unknown one: overload is
+        # exactly what degrades a number. A known number rises to at most DID_KNOWN_RAISE x max(its current share, equal share).
+        cur = normalise(dist(ctx.config, "default", "caller_id"))
+        cap = min(1.0, S.DID_KNOWN_RAISE * max(eq, max((cur.get(d, 0.0) for d in known), default=0.0)))
+        if unknown and rest > cap:
+            rest = cap
+            probe = (1.0 - rest * len(known)) / len(unknown)
         t = {d: rest for d in known}
         t.update({d: probe for d in unknown})
         return round_dist(normalise(t))
