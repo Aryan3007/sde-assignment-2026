@@ -1,0 +1,18 @@
+[PASS] every event ingested exactly once (sum of chunk sizes == last_event_id) - ingested=324314 sim=324314 chunks=493/493
+[PASS] stored D0+ calls == simulator call events - store=104000 sim=104000
+[PASS] no approval applied twice - {'apr_00001': 1, 'apr_00003': 1, 'apr_00002': 1, 'apr_00004': 1, 'apr_00005': 1, 'apr_00006': 1, 'apr_00008': 1, 'apr_00007': 1, 'apr_00010': 1, 'apr_00011': 1, 'apr_00012': 1}
+[PASS] no auto-apply proposal_id applied twice
+[PASS] no approval lapsed
+[PASS] no apply conflicts caused by us re-applying
+[PASS] every server approval is in our store
+[PASS] our approval statuses match the server's
+[PASS] nothing left pending/approved-unapplied in our store at the end
+controller restarts recorded in store: 6
+| workflow | conclusion rate | Δ | pickup | Δ | engagement | Δ | engagement gap captured | hallucinated calls (base) |
+|---|---|---|---|---|---|---|---|---|
+| ks_cancel | 0.365 | +55.1% | 0.256 | +41.2% | 0.491 | +5.1% | 36% | 112 (348) |
+| nw_kyc | 0.489 | +30.8% | 0.312 | +32.9% | 0.592 | -2.7% | 0% | 42 (29) |
+| nw_renewal | 0.498 | +15.1% | 0.295 | +12.6% | 0.560 | +1.0% | 19% | 60 (54) |
+| ALL | 0.436 | +31.8% | 0.280 | +27.7% | 0.538 | +1.0% | 26% | 214 (431) |
+
+## Changes applied by the controller
