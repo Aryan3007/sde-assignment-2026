@@ -81,7 +81,12 @@ class Store:
 
     # ------------------------------------------------------------ helpers
     def q(self, sql: str, args=()) -> list[tuple]:
-        return self.db.execute(sql, args).fetchall()
+        t = time.time()
+        r = self.db.execute(sql, args).fetchall()
+        if time.time() - t > 1.0:
+            import logging
+            logging.getLogger("ctrl.store").warning("slow query %.1fs: %s %s", time.time() - t, sql[:120], args)
+        return r
 
     def one(self, sql: str, args=()):
         r = self.db.execute(sql, args).fetchone()
@@ -104,6 +109,13 @@ class Store:
         return json.loads(r[0]) if r else default
 
     def save_state(self, wf: str, module: str, state):
+        t = time.time()
+        self._save_state(wf, module, state)
+        if time.time() - t > 1.0:
+            import logging
+            logging.getLogger("ctrl.store").warning("slow save_state %.1fs (%s/%s)", time.time() - t, wf, module)
+
+    def _save_state(self, wf: str, module: str, state):
         self.db.execute("INSERT INTO module_state(wf,module,state) VALUES(?,?,?) "
                         "ON CONFLICT(wf,module) DO UPDATE SET state=excluded.state",
                         (wf, module, json.dumps(state, sort_keys=True)))

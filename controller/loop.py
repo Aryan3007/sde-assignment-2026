@@ -136,18 +136,29 @@ class Controller:
         mods = {"experiments": Experiments(ctx), "callerid": CallerId(ctx), "schedule": Schedule(ctx),
                 "incidents": Incidents(ctx)}
         self._supervisor_edits(ctx, mods)
-        if ctx.now >= 0:
-            mods["incidents"].observe()
-            mods["callerid"].observe()
-            mods["experiments"].observe()
-            mods["schedule"].observe(mods["experiments"].carveout_cohorts())
-            self._monitor(ctx)
-        intents = [it for m in mods.values() for it in m.intents()]
-        if self.gov.apply_approved(ctx, intents):
-            return  # config moved; the next tick plans on the new base
-        managed = mods["experiments"].carveout_cohorts() + mods["schedule"].cohorts()
-        if ctx.now >= 0:
-            self.gov.plan(ctx, intents, managed, self.ingest)
+        timings = {}
+
+        def timed(name, fn, *a):
+            t = time.time()
+            r = fn(*a)
+            timings[name] = time.time() - t
+            return r
+        try:
+            if ctx.now >= 0:
+                timed("incidents", mods["incidents"].observe)
+                timed("callerid", mods["callerid"].observe)
+                timed("experiments", mods["experiments"].observe)
+                timed("schedule", mods["schedule"].observe, mods["experiments"].carveout_cohorts())
+                timed("monitor", self._monitor, ctx)
+            intents = timed("intents", lambda: [it for m in mods.values() for it in m.intents()])
+            if timed("apply", self.gov.apply_approved, ctx, intents):
+                return  # config moved; the next tick plans on the new base
+            managed = mods["experiments"].carveout_cohorts() + mods["schedule"].cohorts()
+            if ctx.now >= 0:
+                timed("plan", self.gov.plan, ctx, intents, managed, self.ingest)
+        finally:
+            if sum(timings.values()) > 2.0:
+                log.warning("slow step %s at %s: %s", wid, st["ts"], {k: round(v, 2) for k, v in timings.items()})
 
     def _supervisor_edits(self, ctx: Ctx, mods: dict):
         key = f"sup_handled:{ctx.wf}"
