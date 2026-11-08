@@ -1,6 +1,6 @@
 # Outcome-First Agent Loop — Submission
 
-**Name:** _fill in_ · **Date:** 2026-11-07 · **Hours actually spent (be honest):** _fill in_ · **Language / storage:** Python 3.12, SQLite (WAL), stdlib + `httpx`
+**Name:** Aryan Tyagi · **Date:** 2026-11-07 · **Hours actually spent (be honest):** 6 hours · **Language / storage:** Python 3.12, SQLite (WAL), stdlib + `httpx`
 
 How to run, debug and extend it: [docs/CONTROLLER.md](docs/CONTROLLER.md). Every number below comes from files in `reports/`.
 
